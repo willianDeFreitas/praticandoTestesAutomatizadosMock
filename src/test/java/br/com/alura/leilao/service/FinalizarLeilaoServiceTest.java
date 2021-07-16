@@ -19,28 +19,58 @@ import br.com.alura.leilao.model.Usuario;
 class FinalizarLeilaoServiceTest {
 
 	private FinalizarLeilaoService service;
-	
+
 	@Mock
 	private LeilaoDao leilaoDao;
-	
+
+	@Mock
+	private EnviadorDeEmails enviadorDeEmails;
+
 	@BeforeEach
 	public void beforeEach() {
 		MockitoAnnotations.openMocks(this);
-		this.service = new FinalizarLeilaoService(leilaoDao);
+		this.service = new FinalizarLeilaoService(leilaoDao, enviadorDeEmails);
 	}
-	
+
 	@Test
 	void deveriaFinalizarUmLeilao() {
 		List<Leilao> leiloes = buildLeiloes();
 		Mockito.when(leilaoDao.buscarLeiloesExpirados()).thenReturn(leiloes);
 
 		service.finalizarLeiloesExpirados();
-		
+
 		Leilao leilao = leiloes.get(0);
 		Assert.assertTrue(leilao.isFechado());
 		Assert.assertEquals(new BigDecimal("900"), leilao.getLanceVencedor().getValor());
-		
+
 		Mockito.verify(leilaoDao).salvar(leilao);
+	}
+
+	@Test
+	void naodeveriaEnviarEmailParaVencedorDoLeilaoEmCasoDeErro() {
+		List<Leilao> leiloes = buildLeiloes();
+		Mockito.when(leilaoDao.buscarLeiloesExpirados()).thenReturn(leiloes);
+
+		Mockito.when(leilaoDao.salvar(Mockito.any())).thenThrow(RuntimeException.class);
+		
+		try {
+			service.finalizarLeiloesExpirados();
+			Mockito.verifyNoInteractions(enviadorDeEmails);
+		} catch (Exception e) {}
+
+	}
+
+	@Test
+	void deveriaEnviarEmailParaVencedorDoLeilao() {
+		List<Leilao> leiloes = buildLeiloes();
+		Mockito.when(leilaoDao.buscarLeiloesExpirados()).thenReturn(leiloes);
+
+		service.finalizarLeiloesExpirados();
+
+		Leilao leilao = leiloes.get(0);
+		Lance lanceVencedor = leilao.getLanceVencedor();
+
+		Mockito.verify(enviadorDeEmails).enviarEmailVencedorLeilao(lanceVencedor);
 	}
 
 	private List<Leilao> buildLeiloes() {
@@ -48,12 +78,12 @@ class FinalizarLeilaoServiceTest {
 		Leilao leilao = new Leilao("Celular", new BigDecimal("500"), new Usuario("Fulano"));
 		Lance primeiro = new Lance(new Usuario("Beltrano"), new BigDecimal("600"));
 		Lance segundo = new Lance(new Usuario("Ciclano"), new BigDecimal("900"));
-		
+
 		leilao.propoe(primeiro);
 		leilao.propoe(segundo);
-		
+
 		lista.add(leilao);
-		
+
 		return lista;
 	}
 
